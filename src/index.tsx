@@ -1,141 +1,159 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
 
-function Square(props: {
-  onClick: React.MouseEventHandler,
-  value: string
-}) {
+type BlockState = "X" | "O" | null;
+
+type SquareProps = {
+  onClick: React.MouseEventHandler;
+  value: BlockState;
+}
+
+/** 三目並べの1マス */
+const Square: React.FC<SquareProps> = ({ onClick, value }) => {
   return (
-    <button className="square" onClick={props.onClick}>
-      {props.value}
+    <button className="square" onClick={onClick}>
+      {value}
     </button>
   );
 }
 
 type BoardProps = {
-  squares: string[];
+  squares: BlockState[];
   onClick: (i: number) => void;
 }
 
-class Board extends React.Component<BoardProps> {
-  renderSquare(i: number) {
+/** 盤面 */
+const Board: React.FC<BoardProps> = ({ squares, onClick }) => {
+  function renderSquare(i: number) {
     return (
       <Square
-        value={this.props.squares[i]}
-        onClick={() => this.props.onClick(i)}
+        value={squares[i]}
+        onClick={() => onClick(i)}
       />
     );
   }
 
-  render() {
-    return (
-      <div>
-        <div className="board-row">
-          {this.renderSquare(0)}
-          {this.renderSquare(1)}
-          {this.renderSquare(2)}
-        </div>
-        <div className="board-row">
-          {this.renderSquare(3)}
-          {this.renderSquare(4)}
-          {this.renderSquare(5)}
-        </div>
-        <div className="board-row">
-          {this.renderSquare(6)}
-          {this.renderSquare(7)}
-          {this.renderSquare(8)}
-        </div>
+  return (
+    <div>
+      <div className="board-row">
+        {[0, 1, 2].map(i => renderSquare(i))}
       </div>
-    );
-  }
+      <div className="board-row">
+        {[3, 4, 5].map(i => renderSquare(i))}
+      </div>
+      <div className="board-row">
+        {[6, 7, 8].map(i => renderSquare(i))}
+      </div>
+    </div>
+  );
 }
 
 type GameState = {
-  history: {squares: string[]}[];
+  history: { squares: BlockState[] }[];
   stepNumber: number;
   xIsNext: boolean;
 }
 
-type GameProps = {}
+/** ゲーム全体 */
+const Game: React.FC = () => {
+  const [state, setState] = useState<GameState>({
+    history: [{ squares: Array(9).fill(null) }],
+    stepNumber: 0,
+    xIsNext: true
+  });
 
-class Game extends React.Component<GameProps, GameState> {
-  constructor(props: GameProps) {
-    super(props);
-    this.state = {
-      history: [{
-        squares: Array(9).fill(null)
-      }],
-      stepNumber: 0,
-      xIsNext: true,
-    }
+  function jumpTo(step: number) {
+    setState({
+      history: history.slice(0, step + 1),
+      stepNumber: step,
+      xIsNext: (step % 2) === 0,
+    });
   }
 
-  handleClick(i: number) {
-    const history = this.state.history.slice(0, this.state.stepNumber + 1);
+  function handleClick(i: number) {
+    const history = state.history.slice(0, state.stepNumber + 1);
     const current = history[history.length - 1];
     const squares = current.squares.slice();
     if (calculateWinner(squares) || squares[i]) {
       return;
     }
-    squares[i] = this.state.xIsNext ? 'X' : 'O';
-    this.setState({
+    squares[i] = state.xIsNext ? 'X' : 'O';
+    setState({
       history: history.concat([{
         squares: squares,
       }]),
       stepNumber: history.length,
-      xIsNext: !this.state.xIsNext,
+      xIsNext: !state.xIsNext,
     });
   }
 
-  jumpTo(step: number) {
-    this.setState({
-      stepNumber: step,
-      xIsNext: (step % 2) === 0,
-    });
-  }
-  
-  render() {
-    const history = this.state.history;
-    const current = history[this.state.stepNumber];
-    const winner = calculateWinner(current.squares);
+  const history = state.history;
+  const current = history[state.stepNumber];
 
-    const moves = history.map((step: {squares: string[]}, move: number) => {
-      const desc = move ?
-      'Go to move #' + move :
-      'Go to game start';
-      return (
-        <li key={move}>
-          <button onClick={() => this.jumpTo(move)}>{desc}</button>
-        </li>
-      );
-    });
-
-    let status;
-    if (winner) { 
-      status = 'winner: ' + winner;
-    } else {
-      status = 'next player: ' + (this.state.xIsNext ? 'X' : 'O');
-    }
-
-    return (
-      <div className="game">
-        <div className="game-board">
-          <Board
-            squares={current.squares}
-            onClick={(i: number) => this.handleClick(i)}
-          />
-        </div>
-        <div className="game-info">
-          <div>{status}</div>
-          <ol>{moves}</ol>
-        </div>
+  return (
+    <div className="game">
+      <div className="game-board">
+        <Board
+          squares={current.squares}
+          onClick={(i: number) => handleClick(i)}
+        />
       </div>
-    );
-  }
+      <GameInfo
+        jumpTo={jumpTo}
+        history={history}
+        next={state.xIsNext ? 'X' : 'O'}
+      />
+    </div>
+  );
 }
 
-function calculateWinner(squares: string[]) {
+type GameInfoProps = {
+  history: { squares: BlockState[] }[];
+  jumpTo: (step: number) => void;
+  next: string;
+}
+
+/** 手番の情報とか */
+const GameInfo: React.FC<GameInfoProps> = ({ history, jumpTo, next }) => {
+  const current = history[history.length - 1];
+  const winner = calculateWinner(current.squares);
+  const status = winner ? `winner: ${winner}` : `next player: ${next}`;
+  return (
+    <div className="game-info">
+      <div>{status}</div>
+      <Steps
+        history={history}
+        jumpTo={jumpTo}
+      />
+    </div>
+  );
+}
+
+type StepsProps = {
+  history: { squares: BlockState[] }[];
+  jumpTo: (step: number) => void;
+}
+
+/** 過去の手番へ飛ぶところ */
+const Steps: React.FC<StepsProps> = ({ history, jumpTo }) => {
+  const moves = history.map((step: { squares: BlockState[] }, move: number) => {
+    const desc = move ?
+      'Go to move #' + move :
+      'Go to game start';
+    return (
+      <li key={move}>
+        <button onClick={() => jumpTo(move)}>{desc}</button>
+      </li>
+    );
+  });
+
+  return (
+    <ol>{moves}</ol>
+  );
+}
+
+function calculateWinner(squares: BlockState[]) {
   const lines = [
     [0, 1, 2],
     [3, 4, 5],
